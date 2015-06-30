@@ -23,9 +23,11 @@ FOLDER_PATH = ""
 
 logging.basicConfig(level=logging.INFO)
 
+
 def find_files(source_dir):
     """
-    :param source_dir source directory - hopefully a Skype directory!:
+    Locates the three databases we require.
+    :param source_dir source directory - hopefully a Skype user directory!:
     :return: dict with the following values:
                 {
                   cache_db   : cache_db.db path,
@@ -51,8 +53,9 @@ def find_files(source_dir):
 
 def get_authors(transfer_dict):
     """
+    Extracts authors/senders from the Messages table of main.db
     :param transfer_dict:  returned from get_file_uri_assoc
-    :return:                list of useful dialog partners
+    :return:  list of useful dialog partners
     """
     file_author = {}
     conn = sqlite3.connect(DB_DICT['main_db'])
@@ -68,8 +71,9 @@ def get_authors(transfer_dict):
         curr.execute(sql)
         for row in curr:
             file_author[file_name] = [row[1], row[0], get_original_filename(row[2])]
-    logging.info(file_author)
+    logging.debug(file_author)
     return file_author
+
 
 def get_original_filename(body_xml_value):
     """
@@ -88,6 +92,7 @@ def get_original_filename(body_xml_value):
 
 def get_sent_uri(file_name):
     """
+
     :param file_name:   name of the file we're looking for
     :return:            returns URI value for file_name
     """
@@ -106,6 +111,7 @@ def get_sent_uri(file_name):
 
 def get_file_uri_assoc():
     """
+    Extracts filename and uri associations
     :return: dict containing {uri : filepath} key value pairs
     """
     conn = sqlite3.connect(DB_DICT['cache_db'])
@@ -129,6 +135,7 @@ def get_file_uri_assoc():
 
 def get_cache_file_name(serialized_data):
     """
+    Extracts file name from serialized_data blob
     :param serialized_data: serialized_data field from cache_db
     :return: filename which exists in the blob
     """
@@ -147,6 +154,7 @@ def get_cache_file_name(serialized_data):
 
 def generate_html_report(file_auth_dict, acc_name):
     """
+    Creates a very basic HTML report
     :param file_auth_dict:  dictionary consist of filename:[author,date_sent] key value pairs
     :return: nuffink
     """
@@ -175,8 +183,10 @@ def generate_html_report(file_auth_dict, acc_name):
     html_report.write("""</table></body></html""")
     html_report.close()
 
+
 def generate_text_report(file_auth_dict, acc_name):
     """
+    Creates a tab-delineated text report
     :param file_auth_dict  dictionary consists of filename:[author,date_sent] key value pairs:
     :param acc_name  local Skype account name:
     :return: nuffink
@@ -208,7 +218,6 @@ def get_acc_name():
 
 
 if __name__ == '__main__':
-
     FOLDER_PATH = askdirectory(title="Locate Skype user directory (AppData\\Roaming\\Skype\\<user>)")
     if FOLDER_PATH == "":
         logging.info("No folder chosen, script cancelled")
