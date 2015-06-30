@@ -94,7 +94,7 @@ def get_sent_uri(file_name):
 
 def get_file_uri_assoc():
     """
-    :return: oh i don't know yet - probably two dicts containing sent and received items
+    :return: dict containing {uri : filepath} key value pairs
     """
     conn = sqlite3.connect(DB_DICT['cache_db'])
     curr = conn.cursor()
@@ -157,7 +157,7 @@ def generate_html_report(file_auth_dict, acc_name):
         html_report.write(html_str)
     html_report.write("""</table></body></html""")
     html_report.close()
-
+    
 
 def generate_text_report(file_auth_dict, acc_name):
     """
