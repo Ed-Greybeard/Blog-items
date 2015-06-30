@@ -17,13 +17,11 @@ from tkinter import Tk
 # Little hack to remove tk window
 Tk().withdraw()
 
+# Global variables, for it is they
 DB_DICT = {}
-# CHECKED_FILE_EXT = ['jpg', 'jpeg', 'png']
-logging.basicConfig(level=logging.INFO)
-# TODO add hitlist for files we want - point to it first?
-# TODO consider automated forensic report (could use the debug log?)
-# TODO add to report - received original filename (from body_xml)
+FOLDER_PATH = ""
 
+logging.basicConfig(level=logging.INFO)
 
 def find_files(source_dir):
     """
@@ -157,7 +155,6 @@ def generate_html_report(file_auth_dict, acc_name):
         html_report.write(html_str)
     html_report.write("""</table></body></html""")
     html_report.close()
-    
 
 def generate_text_report(file_auth_dict, acc_name):
     """
@@ -194,12 +191,13 @@ def get_acc_name():
 
 
 if __name__ == '__main__':
-    folder_path = askdirectory(title="Locate Skype user directory (AppData\\Roaming\\Skype\\<user>)")
-    if folder_path == "":
+
+    FOLDER_PATH = askdirectory(title="Locate Skype user directory (AppData\\Roaming\\Skype\\<user>)")
+    if FOLDER_PATH == "":
         logging.info("No folder chosen, script cancelled")
         exit()
-    logging.info("""Input folder: %s""" % folder_path)
-    DB_DICT = find_files(folder_path)
+    logging.info("""Input folder: %s""" % FOLDER_PATH)
+    DB_DICT = find_files(FOLDER_PATH)
     logging.debug(len(DB_DICT))
     logging.debug("attempting to search for received files")
     transfer_dict = get_file_uri_assoc()
