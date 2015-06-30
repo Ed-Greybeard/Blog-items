@@ -1,9 +1,9 @@
 #
 # Name:        Skype_Media.py
 # Purpose:     Extract details from Skype Messaging cache
-# Author:      Greybeard
+# Author:      Chris Ed
 # Created:     27/04/2015
-# Copyright:   Edward Greybeard (c) 2015
+# Copyright:   Chris Ed (c) 2015
 # Licence:     Open
 #
 
