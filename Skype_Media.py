@@ -3,13 +3,14 @@
 # Purpose:     Extract details from Skype Messaging cache
 # Author:      Greybeard
 # Created:     27/04/2015
-# Copyright:   Edward Greybeard (c) 2012
+# Copyright:   Edward Greybeard (c) 2015
 # Licence:     Open
 #
 
 import sqlite3
 import logging
 import os
+from sys import exit
 from tkinter.filedialog import askdirectory
 from tkinter import Tk
 
@@ -69,7 +70,6 @@ def get_authors(transfer_dict):
         curr.execute(sql)
         for row in curr:
             file_author[file_name] = [row[1], row[0]]
-            logging.info(file_author[file_name])
     logging.debug(file_author)
     return file_author
 
@@ -181,7 +181,7 @@ def generate_text_report(file_auth_dict, acc_name):
 
 def get_acc_name():
     """
-
+    Get the local Skype account name
     :return:
     """
     ret_str = ""
@@ -194,10 +194,10 @@ def get_acc_name():
 
 
 if __name__ == '__main__':
-    # print(find_files("."))
-    folder_path = askdirectory(title="Where is the root of the Skype folder?")
-    # folder_path = "C:\\Users\\Chris Ed\\Documents\\Skype_Media\\Skype\\sheona_17dec"
-    # folder_path = "C:\\Users\\Chris Ed\\Documents\\Skype_Media\\Skype\\cp.edmondson"
+    folder_path = askdirectory(title="Locate Skype user directory (AppData\\Roaming\\Skype\\<user>)")
+    if folder_path == "":
+        logging.info("No folder chosen, script cancelled")
+        exit()
     logging.info("""Input folder: %s""" % folder_path)
     DB_DICT = find_files(folder_path)
     logging.debug(len(DB_DICT))
@@ -206,7 +206,6 @@ if __name__ == '__main__':
     logging.debug(len(transfer_dict))
     logging.debug("Find Received authors")
     file_author_dict = get_authors(transfer_dict)
-    # get_sent_authors(sent_dict, DB_DICT['main_db'], DB_DICT['storage_db'])
     logging.debug(len(file_author_dict))
     # Will do both reports because we can
     generate_html_report(file_author_dict, get_acc_name())
