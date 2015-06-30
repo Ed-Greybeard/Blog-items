@@ -59,7 +59,7 @@ def get_authors(transfer_dict):
     curr = conn.cursor()
     for uri, file_name in transfer_dict.items():
         sql = """
-            select author, datetime(timestamp, 'unixepoch')
+            select author, datetime(timestamp, 'unixepoch'), body_xml
             from Messages
             where body_xml like "%%%s%%"
             order by timestamp
@@ -67,9 +67,23 @@ def get_authors(transfer_dict):
         logging.debug(sql)
         curr.execute(sql)
         for row in curr:
-            file_author[file_name] = [row[1], row[0]]
-    logging.debug(file_author)
+            file_author[file_name] = [row[1], row[0], get_original_filename(row[2])]
+    logging.info(file_author)
     return file_author
+
+def get_original_filename(body_xml_value):
+    """
+    Extracts the original filename (v=) from body_xml_value
+    :param body_xml_value: returned from body_xml field of Messages table in main.db
+    :return: original filename
+    """
+    logging.debug(body_xml_value)
+    # not using the xml module - trying to keep imports down (ha!)
+    start_offset = body_xml_value.index("v=\"") + 3
+    logging.debug(body_xml_value[start_offset:])
+    end_offset = body_xml_value.index("\"/>", start_offset)
+    logging.debug(body_xml_value[start_offset:end_offset])
+    return body_xml_value[start_offset:end_offset]
 
 
 def get_sent_uri(file_name):
@@ -141,16 +155,21 @@ def generate_html_report(file_auth_dict, acc_name):
     html_report.write("""<html><body><font face="calibri"><h1>Sample Simple Report</h1>\n""")
     html_report.write("""<h2>Skype Account: %s</h2>\n""" % acc_name)
     html_report.write("""<table border=0 cellpadding=2 cellspacing=2>\n""")
-    html_report.write("""<tr><th>Date</th><th>Sender</th><th>Filename</th></tr>""")
+    html_report.write("""<tr><th>Date</th><th>Sender</th><th>Local Filename</th><th>Original Filename</tr>""")
     for file_name, dateauthor in file_auth_dict.items():
         date_sent = dateauthor[0]
         author = dateauthor[1]
+        original_name = dateauthor[2]
         if author == acc_name:
-            html_str = """<tr bgcolor=#ffaaaa><td>%s</td><td>%s</td><td>%s</td></tr>\n""" % (date_sent,
-                                                                                             author,
-                                                                                             file_name)
+            html_str = """<tr bgcolor=#ffaaaa><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n""" % (date_sent,
+                                                                                                        author,
+                                                                                                        file_name,
+                                                                                                        original_name)
         else:
-            html_str = """<tr><td>%s</td><td>%s</td><td>%s</td></tr>""" % (date_sent, author, file_name)
+            html_str = """<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>""" % (date_sent,
+                                                                                      author,
+                                                                                      file_name,
+                                                                                      original_name)
 
         html_report.write(html_str)
     html_report.write("""</table></body></html""")
@@ -168,10 +187,8 @@ def generate_text_report(file_auth_dict, acc_name):
     for file_name, dateauthor in file_auth_dict.items():
         date_sent = dateauthor[0]
         author = dateauthor[1]
-        if author == acc_name:
-            text_str = """%s\t*%s\t%s\n""" % (date_sent, author, file_name)
-        else:
-            text_str = """%s\t%s\t%s\n""" % (date_sent, author, file_name)
+        original_name = dateauthor[2]
+        text_str = """%s\t%s\t%s\t%s\n""" % (date_sent, author, file_name, original_name)
         text_report.write(text_str)
     text_report.close()
 
