@@ -30,9 +30,9 @@ def find_files(source_dir):
     :param source_dir source directory - hopefully a Skype directory!:
     :return: dict with the following values:
                 {
-                  cache_db   : cache_db_path,
-                  main_db    : main_db_path
-                  storage_db : storage_db_path
+                  cache_db   : cache_db.db path,
+                  main_db    : main.db path,
+                  storage_db : storage_db.db path
                 }
     """
     required_files = ['cache_db.db', 'main.db', "storage_db.db"]
@@ -117,8 +117,8 @@ def get_file_uri_assoc():
 
 def get_cache_file_name(serialized_data):
     """
-    :param serialized_data:
-    :return:
+    :param serialized_data: serialized_data field from cache_db
+    :return: filename which exists in the blob
     """
     hit_str = b"$CACHE/\\\\"
     logging.debug(len(serialized_data))
@@ -135,7 +135,7 @@ def get_cache_file_name(serialized_data):
 
 def generate_html_report(file_auth_dict, acc_name):
     """
-    :param file_auth_dict  dictionary consist of filename:[author,date_sent] key value pairs:
+    :param file_auth_dict:  dictionary consist of filename:[author,date_sent] key value pairs
     :return: nuffink
     """
     # TODO generate report to add sent as well as received
