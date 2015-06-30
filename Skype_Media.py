@@ -1,13 +1,15 @@
-#-------------------------------------------------------------------------------
+#
 # Name:        Skype_Media.py
 # Purpose:     Extract details from Skype Messaging cache
 # Author:      Greybeard
 # Created:     27/04/2015
 # Copyright:   Edward Greybeard (c) 2012
 # Licence:     Open
-#-------------------------------------------------------------------------------
+#
 
-import sqlite3, logging, os
+import sqlite3
+import logging
+import os
 from tkinter.filedialog import askdirectory
 from tkinter import Tk
 
@@ -15,12 +17,12 @@ from tkinter import Tk
 Tk().withdraw()
 
 DB_DICT = {}
-#CACHE_DB = "cache_db.db"
 # CHECKED_FILE_EXT = ['jpg', 'jpeg', 'png']
 logging.basicConfig(level=logging.INFO)
-#TODO add hitlist for files we want - point to it first?
-#TODO consider automated forensic report (could use the debug log?)
-#TODO add to report - received original filename (from body_xml)
+# TODO add hitlist for files we want - point to it first?
+# TODO consider automated forensic report (could use the debug log?)
+# TODO add to report - received original filename (from body_xml)
+
 
 def find_files(source_dir):
     """
@@ -47,10 +49,10 @@ def find_files(source_dir):
     logging.debug(path_dict)
     return path_dict
 
+
 def get_authors(transfer_dict):
     """
     :param transfer_dict:  returned from get_file_uri_assoc
-    :param main_db_path:    path to main.db
     :return:                list of useful dialog partners
     """
     file_author = {}
@@ -61,13 +63,16 @@ def get_authors(transfer_dict):
             select author, datetime(timestamp, 'unixepoch')
             from Messages
             where body_xml like "%%%s%%"
-            """ % (uri)
+            order by timestamp
+            """ % uri
         logging.debug(sql)
         curr.execute(sql)
         for row in curr:
             file_author[file_name] = [row[1], row[0]]
+            logging.info(file_author[file_name])
     logging.debug(file_author)
     return file_author
+
 
 def get_sent_uri(file_name):
     """
@@ -79,15 +84,16 @@ def get_sent_uri(file_name):
     file_index = file_name[1:2]
     sql = "select uri from documents where id = " + file_index
     curr.execute(sql)
+    uri = ""
     for row in curr:
         uri = row[0]
     logging.debug(uri)
     conn.close()
     return uri
 
+
 def get_file_uri_assoc():
     """
-    :param database_path: path to cache_db.db
     :return: oh i don't know yet - probably two dicts containing sent and received items
     """
     conn = sqlite3.connect(DB_DICT['cache_db'])
@@ -103,11 +109,11 @@ def get_file_uri_assoc():
         if source == "i":
             uri = get_sent_uri(cache_path)
             transfer[uri] = cache_path
-            #logging.info(str(index + " set to " + cache_path))
         elif source == "u":
             transfer[index] = cache_path
     logging.debug(transfer)
     return transfer
+
 
 def get_cache_file_name(serialized_data):
     """
@@ -126,28 +132,52 @@ def get_cache_file_name(serialized_data):
     cache_path = str(cache_path[:end_offset], "ascii")
     return cache_path
 
-def generate_report(file_auth_dict, acc_name):
+
+def generate_html_report(file_auth_dict, acc_name):
     """
     :param file_auth_dict  dictionary consist of filename:[author,date_sent] key value pairs:
     :return: nuffink
     """
-    #TODO generate report to add sent as well as received
+    # TODO generate report to add sent as well as received
     html_report = open("report.html", 'w')
     html_report.write("""<html><body><font face="calibri"><h1>Sample Simple Report</h1>\n""")
-    html_report.write("""<h2>Skype Account: %s</h2>\n""" % (acc_name))
+    html_report.write("""<h2>Skype Account: %s</h2>\n""" % acc_name)
     html_report.write("""<table border=0 cellpadding=2 cellspacing=2>\n""")
     html_report.write("""<tr><th>Date</th><th>Sender</th><th>Filename</th></tr>""")
-    for file_name, dateauthor in file_author_dict.items():
+    for file_name, dateauthor in file_auth_dict.items():
         date_sent = dateauthor[0]
         author = dateauthor[1]
         if author == acc_name:
-            html_str = """<tr bgcolor=#ffaaaa><td>%s</td><td>%s</td><td>%s</td></tr>\n""" % (date_sent, author, file_name)
+            html_str = """<tr bgcolor=#ffaaaa><td>%s</td><td>%s</td><td>%s</td></tr>\n""" % (date_sent,
+                                                                                             author,
+                                                                                             file_name)
         else:
             html_str = """<tr><td>%s</td><td>%s</td><td>%s</td></tr>""" % (date_sent, author, file_name)
 
         html_report.write(html_str)
     html_report.write("""</table></body></html""")
     html_report.close()
+
+
+def generate_text_report(file_auth_dict, acc_name):
+    """
+    :param file_auth_dict  dictionary consists of filename:[author,date_sent] key value pairs:
+    :param acc_name  local Skype account name:
+    :return: nuffink
+    """
+    text_report = open("report.txt", "w")
+    text_report.write("""Skype Account: %s\n""" % acc_name)
+    text_report.write("""Date\tSender\tFilename\n""")
+    for file_name, dateauthor in file_auth_dict.items():
+        date_sent = dateauthor[0]
+        author = dateauthor[1]
+        if author == acc_name:
+            text_str = """%s\t*%s\t%s\n""" % (date_sent, author, file_name)
+        else:
+            text_str = """%s\t%s\t%s\n""" % (date_sent, author, file_name)
+        text_report.write(text_str)
+    text_report.close()
+
 
 def get_acc_name():
     """
@@ -163,14 +193,11 @@ def get_acc_name():
     return ret_str
 
 
-#-----------------------------------------------------------
-
-
 if __name__ == '__main__':
-    #print(find_files("."))
+    # print(find_files("."))
     folder_path = askdirectory(title="Where is the root of the Skype folder?")
-    #folder_path = "C:\\Users\\Chris Ed\\Documents\\Skype_Media\\Skype\\sheona_17dec"
-    #folder_path = "C:\\Users\\Chris Ed\\Documents\\Skype_Media\\Skype\\cp.edmondson"
+    # folder_path = "C:\\Users\\Chris Ed\\Documents\\Skype_Media\\Skype\\sheona_17dec"
+    # folder_path = "C:\\Users\\Chris Ed\\Documents\\Skype_Media\\Skype\\cp.edmondson"
     logging.info("""Input folder: %s""" % folder_path)
     DB_DICT = find_files(folder_path)
     logging.debug(len(DB_DICT))
@@ -179,7 +206,8 @@ if __name__ == '__main__':
     logging.debug(len(transfer_dict))
     logging.debug("Find Received authors")
     file_author_dict = get_authors(transfer_dict)
-    #get_sent_authors(sent_dict, DB_DICT['main_db'], DB_DICT['storage_db'])
-
+    # get_sent_authors(sent_dict, DB_DICT['main_db'], DB_DICT['storage_db'])
     logging.debug(len(file_author_dict))
-    generate_report(file_author_dict, get_acc_name())
+    # Will do both reports because we can
+    generate_html_report(file_author_dict, get_acc_name())
+    generate_text_report(file_author_dict, get_acc_name())
