@@ -163,7 +163,7 @@ def generate_html_report(file_auth_dict, acc_name):
     html_report.write("""<html><body><font face="calibri"><h1>Sample Simple Report</h1>\n""")
     html_report.write("""<h2>Skype Account: %s</h2>\n""" % acc_name)
     html_report.write("""<table border=0 cellpadding=2 cellspacing=2>\n""")
-    html_report.write("""<tr><th>Date</th><th>Sender</th><th>Local Filename</th><th>Original Filename</tr>""")
+    html_report.write("""<tr><th>Date</th><th>Sender</th><th>Local Filename</th><th>Original Filename</th></tr>\n""")
     for file_name, dateauthor in file_auth_dict.items():
         date_sent = dateauthor[0]
         author = dateauthor[1]
@@ -174,7 +174,7 @@ def generate_html_report(file_auth_dict, acc_name):
                                                                                                         file_name,
                                                                                                         original_name)
         else:
-            html_str = """<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>""" % (date_sent,
+            html_str = """<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n""" % (date_sent,
                                                                                       author,
                                                                                       file_name,
                                                                                       original_name)
