@@ -158,7 +158,7 @@ def generate_html_report(file_auth_dict, acc_name):
     :param file_auth_dict:  dictionary consist of filename:[author,date_sent] key value pairs
     :return: nuffink
     """
-    # TODO generate report to add sent as well as received
+    # TODO Add link to images (maybe requires copying the images locally? Maybe b64 encode?)
     html_report = open("report.html", 'w')
     html_report.write("""<html><body><font face="calibri"><h1>Sample Simple Report</h1>\n""")
     html_report.write("""<h2>Skype Account: %s</h2>\n""" % acc_name)
@@ -178,7 +178,6 @@ def generate_html_report(file_auth_dict, acc_name):
                                                                                       author,
                                                                                       file_name,
                                                                                       original_name)
-
         html_report.write(html_str)
     html_report.write("""</table></body></html""")
     html_report.close()
