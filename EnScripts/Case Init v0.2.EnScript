@@ -1,0 +1,479 @@
+/*
+QCC Case Init.EnScript
+Used to automate a few of the items in the QCC analysis notes
+Tasks done:
+ - [29-Mar-2016] - Verify hashes, check partition sizes
+ - [12-Apr-2016] - Basic Registry Info
+
+Tasks still to implement:
+ - Timeline analysis (add dialog with seizure date)
+ - User account info
+ - Export registry for Ophcrack (tick box)
+
+*/
+
+class MainClass {
+  //-------------------------------------------------------------
+  // Global Variables
+  //-------------------------------------------------------------
+  String                ScriptName;
+  DateClass             SeizureDate;
+
+  //-------------------------------------------------------------
+  // MAIN
+  //-------------------------------------------------------------
+  void Main(CaseClass c) {
+    SystemClass::ClearConsole(1);
+    ScriptName = "QCC Case Init";
+
+    SeizureDate.Now();
+
+    // check we have a case open and that the case has evidence.
+    // stop if we don't.
+    if (!c || !c.EntryRoot().FirstChild()) {
+      String quitText = "Either there is no case open, or there is no evidence.\nExiting.";
+      Log(quitText);
+      SystemClass::Message(SystemClass::ICONSTOP, "Notarizer: Critical Failure", quitText);
+    }
+
+    //-------------------------------------------------------------
+    // 1 - Verify hashes, check partition sizes
+    //-------------------------------------------------------------
+    Console.WriteLine(" ## 1 - Verify hashes, Check partition sizes ##");
+    forall (EntryClass entry in c.EntryRoot()) {
+      if (entry.IsDisk()) {
+        Console.WriteLine("");
+
+        DeviceClass dev = entry.GetDevice();
+        //Log("Exhibit Information");
+        //Log("-------------------");
+        Log("# Exhibit Ref:              " + entry.Name());
+        Log("  Acquisition Hash:         " + dev.AcquisitionHash());
+        Log("  Verification Hash:        " + dev.VerifyHash());
+        Log("  Notes:                    " + dev.FileIntegrity());
+        Log("");
+        Log("  Partition Details");
+        Log("  -----------------");
+        ulong totalUsedSectors;
+        Log("    <Partition Name>        <Sectors>");
+        forall (EntryClass subEntry in c.EntryRoot()) {
+          if (subEntry.Parent() == entry) {
+            if (subEntry.Name() == "Unused Disk Area")
+            {
+              Log("     Unused Disk Area       " + String::Format((subEntry.PhysicalSize() / 512)));
+              totalUsedSectors = totalUsedSectors + (subEntry.PhysicalSize() / 512);
+            }
+            else {
+              VolumeClass vol = subEntry.GetVolume();
+              Log("         \"" + vol.Name() + ":\\\"              " + vol.TotalSectors());
+              totalUsedSectors = totalUsedSectors + vol.TotalSectors();
+            }
+          } // END if (subentry.Parent..
+        } // END forall (EntryClass subEntry..
+        Log("  Total Reported Sectors:   " + String::Format(totalUsedSectors));
+        Log("  Total Sectors on Disk:    " + dev.TotalSectors());
+        ulong discrepancy = dev.TotalSectors() - totalUsedSectors;
+        if (discrepancy <= 1)
+        {
+          // discrepancy of 1 is fine - sector 0 used for MBR
+          Log("  Sector Discrepancy:       " + discrepancy + " (OK)");
+        }
+        else
+        {
+          Log("  Sector Discrepancy:       " + discrepancy + " (CHECK!)");
+        }
+      } // END if (entry.IsDisk()
+    } // END forall (EntryClass entry
+
+    //-------------------------------------------------------------
+    // 2 - Basic Windows Registry Info
+    //-------------------------------------------------------------
+    Log("");
+    Log("");
+    Log(" ## 2 - Windows Registry Info  ##");
+    Log("");
+
+    forall (EntryClass e in c.EntryRoot()) {
+      // if the entry is a volume, and we can find a sys32\config directoy..
+      if (e.IsVolume() && e.Find("\\Windows\\System32\\config"))
+      {
+        BasicWinOSInfo(e);
+      } // end if (e.IsVolume() ..
+    } // end forall (EntryClass e in c.EntryRoot())
+
+
+  }  // END void Main(CaseCl..
+
+
+  //-------------------------------------------------------------
+  // BasicWinOSInfo
+  // Originally Basic Registry Info.EnScript
+  //-------------------------------------------------------------
+  void BasicWinOSInfo(EntryClass e)
+  {
+    // log what we're doing
+    //Log("Starting Info Retrieval..");
+
+    // init the classes we need for the registry exam
+    RegistryClass reg(e);
+    RegValueClass regValues();
+
+    // gigantic RegCommandClass variable init
+    // in here we put every registry key we want
+    // the is no neater way I know of
+    RegCommandClass cmds(),
+                    command2(cmds,                                                // parent RegCommandClass
+                             "Product Name",                                      // command name
+                             RegCommandClass::READVALUE,                          // type of command
+                             RegCommandClass::HKEY_LOCAL_MACHINE,                 // root key
+                             "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",   // name of the value we want to read
+                             "ProductName",                                       // valuename
+                             0,                                                   // options
+                             0xffffffff),                                         // recursion depth
+                    command3(cmds,                                                // Registered Owner command
+                             "Reg Owner",
+                             RegCommandClass::READVALUE,
+                             RegCommandClass::HKEY_LOCAL_MACHINE,
+                             "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                             "RegisteredOwner",
+                             0,
+                             0xffffffff),
+                    command4(cmds,                                                // Registered Org
+                             "Reg Org",
+                             RegCommandClass::READVALUE,
+                             RegCommandClass::HKEY_LOCAL_MACHINE,
+                             "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                             "RegisteredOrganization",
+                             0,
+                             0xffffffff),
+                    command5(cmds,                                                // InstallDate
+                             "InstallDate",
+                             RegCommandClass::READVALUE,
+                             RegCommandClass::HKEY_LOCAL_MACHINE,
+                             "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+                             "InstallDate",
+                             0,
+                             0xffffffff),
+                    command6(cmds,                                                // ShutdownTime
+                             "ShutdownTime",
+                             RegCommandClass::READVALUE,
+                             RegCommandClass::HKEY_LOCAL_MACHINE,
+                             "SYSTEM\\CurrentControlSet\\Control\\Windows",
+                             "ShutdownTime",
+                             0,
+                             0xffffffff),
+                    command7(cmds,                                                // ComputerName
+                             "ComputerName",
+                             RegCommandClass::READVALUE,
+                             RegCommandClass::HKEY_LOCAL_MACHINE,
+                             "SYSTEM\\CurrentControlSet\\Control\\ComputerName\\ComputerName",
+                             "ComputerName",
+                             0,
+                             0xffffffff),
+                    command8(cmds,                                                // Timezone
+                             "TimeZone",
+                             RegCommandClass::READVALUE,
+                             RegCommandClass::HKEY_LOCAL_MACHINE,
+                             "SYSTEM\\CurrentControlSet\\Control\\TimeZoneInformation",
+                             "TimeZoneKeyName",
+                             0,
+                             0xffffffff),
+                    command9(cmds,                                                // Daylight Start
+                             "DaylightStart",
+                             RegCommandClass::READVALUE,
+                             RegCommandClass::HKEY_LOCAL_MACHINE,
+                             "SYSTEM\\CurrentControlSet\\Control\\TimeZoneInformation",
+                             "DaylightStart",
+                             0,
+                             0xffffffff),
+                    command10(cmds,                                                // Standard Start
+                             "StandardStart",
+                             RegCommandClass::READVALUE,
+                             RegCommandClass::HKEY_LOCAL_MACHINE,
+                             "SYSTEM\\CurrentControlSet\\Control\\TimeZoneInformation",
+                             "StandardStart",
+                             0,
+                             0xffffffff),
+                    command11(cmds,                                                // Standard Start
+                             "DaynamicDaylightTimeDisabled",
+                             RegCommandClass::READVALUE,
+                             RegCommandClass::HKEY_LOCAL_MACHINE,
+                             "SYSTEM\\CurrentControlSet\\Control\\TimeZoneInformation",
+                             "DaynamicDaylightTimeDisabled",
+                             0,
+                             0xffffffff);
+
+
+    // if the command runs OK..
+    if (reg.Run(cmds, regValues))
+    {
+      //Log("Successfully read Registry values");
+
+      // first set the easy variables
+      // which require no shenanigans
+      String prodName = regValues.Find("Product Name").ValueText();
+      String regOwner = regValues.Find("Reg Owner").ValueText();
+      String regOrg = regValues.Find("Reg Org").ValueText();
+      String computerName = regValues.Find("ComputerName").ValueText();
+      String timeZone = regValues.Find("TimeZone").ValueText();
+
+
+      // now a more difficult one
+      // installdate is a unix timestamp
+      // first we cast it as an int using uint::Convert
+      uint rawInsDate = uint::Convert(regValues.Find("InstallDate").ValueText());
+      // init a dateclass so we can easily do the conversion
+      DateClass installDate;
+      // use SetUnix DateClass method to convert our uint
+      installDate.SetUnix(rawInsDate);
+
+
+      // shenanigans!!
+      // required to read windows time
+      // interesting they didn't just implement a SetWin() method.
+      // huh.
+      String shutdownTime;
+      RegValueClass v = regValues.Find("ShutdownTime");
+      // see function getWinDate, below
+      shutdownTime = getWinDate(v);
+      // end shenanigans
+
+      // DaylightStart is a strange beast
+      // 16 bytes
+      // in SYSTEMTIME format
+      String daylightStart;
+      v = regValues.Find("DaylightStart");
+      // see function getDaylightString, below
+      daylightStart = getDayLightString(v);
+
+      // StandardStart is the same format as DaylightStart
+      // i.e, strange
+      String standardStart;
+      v = regValues.Find("StandardStart");
+      standardStart = getDayLightString(v);
+
+      // output our stuff
+      // don't use Log() as folks might want to copy/paste it into the case DB
+      Console.WriteLine(String::Format("# Exhibit Ref:              {0}", e.Parent().Name()));
+      Console.WriteLine(String::Format("  EnCase Partition label:   {0}", e.Name()));
+      Console.WriteLine("");
+      Console.WriteLine("  Windows Information");
+      Console.WriteLine("  -------------------");
+      Console.WriteLine(String::Format("  Computer Name:            {0}", computerName));
+      Console.WriteLine(String::Format("  Operating System:         {0}", prodName));
+      Console.WriteLine(String::Format("  Registered Owner:         {0}", regOwner));
+      Console.WriteLine(String::Format("  Registered Organisation:  {0}", regOrg));
+      Console.WriteLine(String::Format("  Install Date:             {0}", installDate.WebString()));
+      Console.WriteLine(String::Format("  Last Shutdown:            {0}", shutdownTime));
+      Console.WriteLine(String::Format("  Timezone:                 {0}", timeZone));
+      Console.WriteLine(String::Format("  Daylight Start:           {0}", daylightStart));
+      Console.WriteLine(String::Format("  Standard Start:           {0}", standardStart));
+      Console.WriteLine("\n");
+
+   }
+
+  }
+  //-------------------------------------------------------------
+  // getWinDate
+  // used to move all this ReadWinDate junk out of the main
+  // "BasicOSInfo" function
+  //-------------------------------------------------------------
+
+  String getWinDate (RegValueClass v)
+  {
+    String returnString;
+    // ReadWinDate is part of MemoryFileClass
+    // so we need a MemoryFileClass
+    MemoryFileClass mf();
+
+    // try creating one 8 bytes long
+    if (mf.Open(8, FileClass::WRITE))
+    {
+      // put data from RegValue v into mf
+      if (v.GetData(mf))
+      {
+        // init DateClass
+        DateClass d();
+        // check we're at the start of our memoryclass
+        mf.Seek(0);
+        // if ReadWinDate works, return it as a WebString
+        if (mf.ReadWinDate(d))
+          returnString = d.WebString();
+        // else return a fail message
+        else
+          returnString = "Could Not Read Date From MemoryFileClass";
+      } // endif (v.GetData(mf))
+      else
+      {
+        returnString = "Could Not Read Data From Value";
+      }
+    } // endif (mf.Open(8, FileClass::WRITE))
+    else
+      returnString = "MemoryFileClass Problem";
+
+    return returnString;
+
+  }
+
+  //-------------------------------------------------------------
+  // getDayLightString
+  //-------------------------------------------------------------
+
+  String getDayLightString (RegValueClass v)
+  {
+    String returnString;
+
+    // define our offsets
+    long monthOffset = 2,
+         dayOfWeekOffset = 4,
+         dayOffset = 14,
+         hourOffset = 6,
+         minOffset = 8;
+
+    // we need to operate using a MemoryFileClass
+    // so let's initialise one
+    MemoryFileClass mf();
+    if (mf.Open(16, FileClass::WRITE))
+    {
+      // copy RegClass v into mf
+      if (v.GetData(mf))
+      {
+        // we will use the MemoryClass method ReadBinaryInt
+        // to convert binary data into a long
+
+        mf.Seek(monthOffset);
+        long monthLong = mf.ReadBinaryInt(2);
+        // Log(monthLong);
+
+        mf.Seek(dayOfWeekOffset);
+        long dayOfWeekLong = mf.ReadBinaryInt(2);
+        // Log(dayOfWeekLong);
+
+        mf.Seek(dayOffset);
+        long dayLong = mf.ReadBinaryInt(2);
+        // Log(dayLong);
+
+        mf.Seek(hourOffset);
+        long hourLong = mf.ReadBinaryInt(2);
+        // Log(hourLong);
+
+        mf.Seek(minOffset);
+        long minLong = mf.ReadBinaryInt(2);
+        // Log(minLong);
+
+        // do the long conversion stuff in a separate function
+        String month = convertToMonth(monthLong);
+        String day = convertToDay(dayLong);
+        String dayOfWeek = convertToDayOfWeek(dayOfWeekLong, day, month);
+
+
+        returnString = String::Format("{0} at {1}:{2}", dayOfWeek, hourLong, minLong);
+      }
+      else
+      {
+        returnString = "Could Not Read Data From Value";
+      }  // endif (v.GetData(mf))
+
+    }
+    else
+    {
+      returnString = "MemoryFileClass Problem";
+    }  // endif (mf.Open(16, FileClass::WRITE))
+
+    return returnString;
+  }
+
+  //-------------------------------------------------------------
+  // convertToX
+  // as per the following link:
+  // http://msdn.microsoft.com/en-us/library/windows/desktop/ms724950%28v=vs.85%29.aspx
+  //-------------------------------------------------------------
+
+  String convertToMonth(long monthLong)
+  {
+    switch(monthLong)
+    {
+    case 1:
+      return "Jan";
+    case 2:
+      return "Feb";
+    case 3:
+      return "Mar";
+    case 4:
+      return "Apr";
+    case 5:
+      return "May";
+    case 6:
+      return "Jun";
+    case 7:
+      return "Jul";
+    case 8:
+      return "Aug";
+    case 9:
+      return "Sep";
+    case 10:
+      return "Oct";
+    case 11:
+      return "Nov";
+    case 12:
+      return "Dec";
+    default:
+      return "(None)";
+    }
+
+  }
+
+  String convertToDayOfWeek(long dayOfWeekLong, const String &dayName, const String &monthName)
+  {
+    switch (dayOfWeekLong)
+    {
+      case 1:
+        return String::Format("1st {0} in {1}", dayName, monthName);
+      case 2:
+        return String::Format("2nd {0} in {1}", dayName, monthName);
+      case 3:
+        return String::Format("3rd {0} in {1}", dayName, monthName);
+      case 4:
+        return String::Format("4th {0} in {1}", dayName, monthName);
+      case 5:
+        return String::Format("Last {0} in {1}", dayName, monthName);
+      default:
+        return "(None)";
+    }
+  }
+
+  String convertToDay(long dayLong)
+  {
+    switch (dayLong)
+    {
+      case 0:
+        return "Sunday";
+      case 1:
+        return "Monday";
+      case 2:
+        return "Tuesday";
+      case 3:
+        return "Wednesday";
+      case 4:
+        return "Thursday";
+      case 5:
+        return "Friday";
+      case 6:
+        return "Saturday";
+      default:
+      return "None";
+    }
+  }
+
+  //-------------------------------------------------------------
+  // Log
+  //-------------------------------------------------------------
+  void Log(const String &message)
+  {
+    DateClass date();
+    date.Now();
+    // Console.WriteLine("[{0}] [{1}] {2}", date.GetString(), ScriptName, message);
+    Console.WriteLine(message);
+  }  // END void Log(const..
+
+}

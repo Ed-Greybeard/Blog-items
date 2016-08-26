@@ -1,0 +1,449 @@
+/*
+C4M Movie exporter v1.3
+-----------------------
+Quickly export movies and generate a c4m xml file
+
+Updates:
+  13-08-2013
+  Started Script
+  22-08-2013
+  Popup box appears when script completes.
+  Optional "detailed" report - trunc name, full name, path, created date
+  Generates Case Report.xml from case details (editable)
+  23-08-2013
+  Script now checks that all selected entries have a hash value
+  09-10-2013
+  Filled the "Physical Location" field so that C4All Import v3 script can be used
+  14-07-2015
+  Added full path to the CSV export to enable renaming of files for private project
+  29-07-2015
+  Added c4all v2 export option
+
+To do:
+  Additional status bar for copying files
+
+*/
+class SelectedFiles : NameListClass
+{
+  EntryClass e;
+  SelectedFiles(SelectedFiles parent = null, String name = null, EntryClass eClass = null):
+    NameListClass(parent, name),
+    e = eClass
+  {
+  }
+}
+class MainClass {
+
+  //-------------------------------------------------------------
+  // Global Variables
+  //-------------------------------------------------------------
+
+  String                ScriptName,
+                        TruncateText,
+                        logFileName,
+                        reportFileName,
+                        CaseRef,
+                        DFUExaminer;
+
+  uint                  pathLengthLimit;
+
+  int                   exportPathLen,
+                        FileCounter,
+                        TotalFiles;
+
+  bool                  FullReport;
+
+  LocalFileClass        logFile,
+                        c4m_index;
+
+  //-------------------------------------------------------------
+  // Main
+  //-------------------------------------------------------------
+
+  void Main(CaseClass c) {
+    SystemClass::ClearConsole(1);
+
+    // init Global Variables
+    // ---------------------
+    SelectedFiles SelectedFilesRoot();
+    FileCounter = 0;
+    TotalFiles = 0;
+    ScriptName = "C4M Movie Export";
+    String versionText = "Quick C4M Export v1.5";
+    logFile = new LocalFileClass();
+    c4m_index = new LocalFileClass();
+
+    FullReport = true;
+    SystemClass::ClearConsole(1);
+
+    // if we have a case open..
+    if (c)
+    {
+      // .. and the case has evidence..
+      if (c.EntryRoot().FirstChild())
+      {
+        Log("Started");
+
+        // Count and check selected files FIRST
+        forall (EntryClass e in c.EntryRoot())
+        {
+          if (e.IsSelected())
+          {
+            if (e.HashValue().GetString() == "")
+            {
+              String quitText = String::Format("{0} has no hash value!\nEither run hash computation or de-select file.", e.Name());
+              Log(String::Format("{0} has no hash value!", e.FullPath()));
+              Log("Either de-select file or run hash computation.");
+              Log("Exiting..");
+              SystemClass::Message(SystemClass::ICONSTOP, "Error", quitText);
+              SystemClass::Exit(0);
+            }
+            SelectedFiles(SelectedFilesRoot, "", e);
+            TotalFiles++;
+          }
+        } // forall (EntryClass e in c.EntryRoot())
+
+        Log(String::Format("{0} Files Selected for export.", TotalFiles));
+
+
+        // Now show our warning
+        String warningText = versionText + "\n\nC4All v2 format ONLY\n\n* Runs ONLY on selected files\n* Hash the files FIRST\n* It will truncate filenames";
+        SystemClass::Message(0, "", warningText);
+
+
+        // INIT DIALOG BOX
+        // init dialogclass
+        DialogClass dialog(null, versionText);
+
+        // EXPORT PATH FORM
+        // form input title
+        String formTitle = "Export folder:";
+        // default box text
+        String exportPath(c.ExportFolder());
+
+        StringEditClass stringEdit(dialog,                          // parent WindowClass object
+                                   formTitle,                       // form name
+                                   WindowClass::START,              // x position (left co-ord)
+                                   WindowClass::START,              // y position (top co-ord)
+                                   200,                             // width
+                                   WindowClass::DEFAULT,            // height
+                                   0,                               // box style
+                                   exportPath,                      // default text
+                                   -1,                              // maximum text length (-1 is "no limit")
+                                   WindowClass::REQUIRED | WindowClass::FOLDEROPEN); // WindowClass::FILEOPEN gives the file open option
+
+
+        // Groupbox Class to go around our options
+        GroupBoxClass group(dialog, "Script Options", WindowClass::START, 30, 200, 60, 0);
+
+        // TRUNCATE TEXT FORM
+        // form input title
+        formTitle = "Replacement Text:";
+        // default box text
+        TruncateText = "FILE-";
+
+        StringEditClass truncEdit(dialog,                          // parent WindowClass object
+                                  formTitle,                       // form name
+                                  15,                              // x position (left co-ord)
+                                  40,                              // y position (top co-ord)
+                                  75,                              // width
+                                  WindowClass::DEFAULT,            // height
+                                  0,                               // box style
+                                  TruncateText,                    // default text
+                                  8,                               // maximum text length (-1 is "no limit")
+                                  0);                              // Options
+
+        // EXPORT FULL PATH FORM
+        // "Separate Known Files" checkbox title
+        String exportFullTitle = "Generate detailed report";
+        // "Separate Known Files" checkbox control constructor
+        CheckBoxClass exportFullEdit(dialog,                          // parent WindowClass object
+                                     exportFullTitle,                 // form name
+                                     15,                              // x position (left co-ord)
+                                     70,                              // y position (top co-ord)
+                                     180,                             // width
+                                     WindowClass::DEFAULT,            // height
+                                     0,                               // box style
+                                     FullReport);                     // value
+
+
+        // Groupbox Class to go around case details
+        GroupBoxClass group2(dialog, "Case Report Details", WindowClass::START, 95, 200, 70, 0);
+
+        // Case details form
+        // form input title
+        formTitle = "Case Number:";
+        // default box text
+        CaseRef = c.Name();
+
+        StringEditClass caseRefEdit(dialog,                          // parent WindowClass object
+                                  formTitle,                       // form name
+                                  15,                              // x position (left co-ord)
+                                  105,                              // y position (top co-ord)
+                                  180,                              // width
+                                  WindowClass::DEFAULT,            // height
+                                  0,                               // box style
+                                  CaseRef,                    // default text
+                                  -1,                               // maximum text length (-1 is "no limit")
+                                  0);                              // Options
+        // Case details form
+        // form input title
+        formTitle = "Examiner:";
+        // default box text
+        DFUExaminer = c.Examiner();
+
+        StringEditClass dfuExaminerEdit(dialog,                          // parent WindowClass object
+                                  formTitle,                       // form name
+                                  15,                              // x position (left co-ord)
+                                  135,                              // y position (top co-ord)
+                                  180,                              // width
+                                  WindowClass::DEFAULT,            // height
+                                  0,                               // box style
+                                  DFUExaminer,                    // default text
+                                  -1,                               // maximum text length (-1 is "no limit")
+                                  0);                              // Options
+
+        // execute the box
+        if (dialog.Execute() != SystemClass::OK)
+        {
+          // if anything othert than "OK" is clicked, exit
+          Log("Script Cancelled");
+          SystemClass::Exit(1);
+        }
+
+        // ----------------------------------------------------
+        // SHENANIGAN LAND
+        // ----------------------------------------------------
+
+
+        // open logFile
+        logFileName = String::Format("{0} File Details.csv", CaseRef);
+
+        logFile.Open(exportPath + "\\" + logFileName, FileClass::WRITETEXTCRLF);
+        if (FullReport == true)
+        {
+          logFile.WriteLine("Truncated Name\tOriginal Name\tDate Created\tFull Path");
+        }
+        else
+        {
+          logFile.WriteLine("Truncated Name\tOriginal Name");
+
+        }
+
+        // open and write Case Report.xml
+        Log("Creating Case Report.xml");
+        writeCaseReport(DFUExaminer, CaseRef, exportPath);
+
+        // open C4M Index.xml
+        reportFileName = exportPath + "\\" + "C4M Index.xml";
+        Log(String::Format("Creating {0}", reportFileName));
+
+        c4m_index.Open(reportFileName, FileClass::WRITETEXTCRLF);
+        c4m_index.WriteLine(buildXMLHeader());
+        c4m_index.Close();
+
+        // initiate status bar
+        SystemClass::StatusRange(String::Format("Exporting {0} Files", TotalFiles), TotalFiles);
+        int counter = 1;
+
+        forall (SelectedFiles s in SelectedFilesRoot)
+        {
+            String fileName = s.e.Name();
+            Log(String::Format("Processing: {0}", fileName));
+            String hash_val = s.e.HashValue().GetString();
+            Log(String::Format("    File Hash Value: {0}", hash_val));
+            //do file truncation
+
+            String newFileName = doFileTrunc(s.e);
+            if (FullReport == true)
+            {
+              // have to hack this since String::Format only takes 3 args
+              String dateCreated = s.e.Created().GetString();
+              String fullPath = s.e.FullPath();
+              String outputString = String::Format("{0}\t{1}\t{2}", newFileName, fileName, dateCreated);
+              logFile.WriteLine(String::Format("{0}\t{1}", outputString, fullPath));
+            }
+            else
+            {
+              logFile.WriteLine(String::Format("{0}\t{1}", newFileName, fileName));
+            }
+            fileName = newFileName;
+
+            EntryFileClass file();
+            LocalFileClass local;
+            String fullFolderPath;
+            local = new LocalFileClass();
+            Log(String::Format("    Starting file export ({0} bytes)..", s.e.LogicalSize()));
+
+            file.Open(s.e);
+
+            fullFolderPath = String::Format("{0}\\Files", exportPath);
+
+            if (!LocalMachine.PathExists(fullFolderPath))
+            {
+              LocalMachine.CreateFolder(fullFolderPath, ConnectionClass::CREATEFOLDERALL);
+            }
+
+            SystemClass::StatusMessage(String::Format("Exporting {0} of {1}", counter, TotalFiles));
+            SystemClass::StatusInc();
+
+            local.Open(fullFolderPath + "\\" + fileName, FileClass::WRITE);
+            local.WriteBuffer(file);
+            local.Close();
+            file.Close();
+
+            counter++;
+
+            // write XML node in c4m_index.xml
+
+            if (writeXMLNode(s.e, newFileName))
+            {
+              Log("c4m index.xml updated OK");
+            }
+            else
+            {
+              Log("c4m index.xml update FAILED");
+            }
+        } // forall (SelectedFiles s in SelectedFilesRoot)
+
+      c4m_index.Open(reportFileName, FileClass::APPEND);
+      c4m_index.WriteLine(buildXMLFooter());
+      c4m_index.Close();
+
+      SystemClass::Message(SystemClass::ICONINFORMATION, ScriptName, String::Format("Script completed successfully - {0} files exported.", TotalFiles));
+
+
+      logFile.Close();
+      } // if (c.EntryRoot().FirstChild())
+
+      else
+      {
+        Console.WriteLine("No evidence!");
+      }
+
+    } // if (c)
+
+    else
+    {
+      Console.WriteLine("No case!");
+    }
+
+  } // End MAIN
+
+
+  //-------------------------------------------------------------
+  // doFileTrunc
+  //-------------------------------------------------------------
+  String doFileTrunc(const EntryClass fE)
+  {
+     String fileExt = fE.Extension();
+     String newFileName = String::Format("{0}{1}.{2}", TruncateText, FileCounter, fileExt);
+     Log(String::Format("    \"{0}\" becomes \"{1}\"", fE.Name(), newFileName));
+     FileCounter = FileCounter + 1;
+
+     return newFileName ;
+  }
+
+  //-------------------------------------------------------------
+  // buildXMLHeader
+  //-------------------------------------------------------------
+  String buildXMLHeader()
+  {
+    String header = "<?xml version=\'1.0\'?><ReportIndex version=\"2.0\">";
+    return header;
+  }
+
+  //-------------------------------------------------------------
+  // buildXMLFooter
+  //-------------------------------------------------------------
+  String buildXMLFooter()
+  {
+    String footer = "</ReportIndex>";
+    return footer;
+  }
+  //-------------------------------------------------------------
+  // writeXMLNode
+  //-------------------------------------------------------------
+bool writeXMLNode(const EntryClass &e, const String &newFileName)
+{
+    String filepath = e.FullPath();
+    String hashval = e.HashValue().GetString();
+    ulong filesize = e.LogicalSize();
+    LocalFileClass lf();
+
+    if (lf.Open(reportFileName, FileClass::APPEND))
+    {
+          lf.WriteLine("  <Movie>");
+//        path value must be RELATIVE - otherwise c4all client won't be able to locate the image
+//        this is because it automatically adds the value from THIS field to the current directory
+          lf.WriteLine("    <path><![CDATA[Files\\]]></path>");
+          lf.WriteLine("    <movie>" + newFileName + "</movie>");
+          lf.WriteLine("    <category>9</category>");
+          lf.WriteLine("    <id>" + FileCounter + "</id>");
+          lf.WriteLine("    <fileoffset>0</fileoffset>");
+          lf.WriteLine("    <fullpath><![CDATA[" + filepath + "]]></fullpath>");
+          lf.WriteLine("    <created></created><accessed></accessed><written></written><deleted></deleted>");
+          lf.WriteLine("    <hash>" + hashval + "</hash>");
+          lf.WriteLine("    <encaseHash></encaseHash>");
+          lf.WriteLine("    <myDescription>Unknown</myDescription>");
+          lf.WriteLine("    <physicalLocation>" + e.PhysicalLocation() + "</physicalLocation>");
+          lf.WriteLine("<myUnique>0</myUnique><tagged>0</tagged><subCat></subCat><notes></notes>");
+          lf.WriteLine("    <fileSize>" + filesize +"</fileSize>");
+          lf.WriteLine("    </Movie>");
+          lf.Close();
+          return true;
+    }
+    else
+    {
+      return false;
+    }
+
+}
+  //-------------------------------------------------------------
+  // writeCaseReport
+  //-------------------------------------------------------------
+
+  bool writeCaseReport(const String &dfuExaminer, const String &caseRef, const String &outputFolder)
+  {
+    String outputFilePath = String::Format("{0}\\Case Report.xml", outputFolder);
+    LocalFileClass lf();
+    DateClass date();
+    date.Now();
+    String todayDate = date.GetString("dd-MMM-yyyy", "", 0);
+    String todayTime = date.GetString("", "HH-mm-ss", 0);
+
+    if (lf.Open(outputFilePath, FileClass::WRITETEXTCRLF))
+    {
+          lf.WriteLine("<?xml version=\"1.0\" encoding=\"utf-16\"?>");
+          lf.WriteLine("<CaseReport>");
+          lf.WriteLine(String::Format("<CaseNumber><![CDATA[{0}]]></CaseNumber>", caseRef));
+          lf.WriteLine(String::Format("<Analyst><![CDATA[{0}]]></Analyst>", dfuExaminer));
+          lf.WriteLine(String::Format("<Date><![CDATA[{0}]]></Date>", todayDate));
+          lf.WriteLine(String::Format("<Time><![CDATA[{0}]]></Time>", todayTime));
+          lf.WriteLine("<Comment><![CDATA[Script Tested Against EnCase v6.19]]></Comment>");
+          lf.WriteLine("<ScriptVersion><![CDATA[C4M Simple EnScript]]></ScriptVersion>");
+          lf.WriteLine("<EnCaseVersion><![CDATA[EnCase v6.19]]></EnCaseVersion>");
+          lf.WriteLine("<Excluded><![CDATA[0]]></Excluded>");
+          lf.WriteLine("</CaseReport>");
+          lf.Close();
+    }
+    else
+    {
+      return false;
+    }
+    return true;
+  }
+
+
+  //-------------------------------------------------------------
+  // Log
+  //-------------------------------------------------------------
+  void Log(const String &message)
+  {
+    DateClass date();
+    date.Now();
+    Console.WriteLine("[{0}] [{1}] {2}", date.GetString(), ScriptName, message);
+  }
+
+
+} // End Class MainClass

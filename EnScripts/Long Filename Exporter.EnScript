@@ -1,0 +1,276 @@
+/*
+C4M Exporter
+
+Exports all selected files and creates a C4M XML file
+
+
+Updates:
+  13-08-2013
+  Started Script
+
+*/
+class MainClass {
+
+  //-------------------------------------------------------------
+  // Global Variables
+  //-------------------------------------------------------------
+
+  String                ScriptName,
+                        TruncateText,
+                        logFileName;
+
+  uint                  pathLengthLimit;
+
+  int                   exportPathLen,
+                        FileCounter;
+
+  bool                  ExportFull;
+
+  LocalFileClass        logFile;
+
+  //-------------------------------------------------------------
+  // Main
+  //-------------------------------------------------------------
+
+  void Main(CaseClass c) {
+    SystemClass::ClearConsole(1);
+
+    // init Global Variables
+    // ---------------------
+    FileCounter = 1;
+    ScriptName = "Long Filename Exporter";
+    logFile = new LocalFileClass();
+    logFileName = "Changes.txt";
+
+
+    // if we have a case open..
+    if (c)
+    {
+      Log("Case is open..");
+      // .. and the case has evidence..
+      if (c.EntryRoot().FirstChild())
+      {
+        Log("Case has evidence - starting script");
+
+        // INIT DIALOG BOX
+        // box title
+        String boxTitle = "C4M ";
+        // init dialogclass
+        DialogClass dialog(null, boxTitle);
+
+        // EXPORT PATH FORM
+        // form input title
+        String formTitle = "Choose an export destination:";
+        // default box text
+        String exportPath(c.ExportFolder());
+
+        StringEditClass stringEdit(dialog,                          // parent WindowClass object
+                                   formTitle,                       // form name
+                                   WindowClass::START,              // x position (left co-ord)
+                                   WindowClass::START,              // y position (top co-ord)
+                                   200,                             // width
+                                   WindowClass::DEFAULT,            // height
+                                   0,                               // box style
+                                   exportPath,                      // default text
+                                   -1,                              // maximum text length (-1 is "no limit")
+                                   WindowClass::REQUIRED | WindowClass::FOLDEROPEN); // WindowClass::FILEOPEN gives the file open option
+
+
+        // Groupbox Class to go around our options
+        GroupBoxClass group(dialog, "", WindowClass::START, 30, 200, 60, 0);
+
+        // FILE LENGTH LIMIT FORM
+        // form title
+        formTitle = "Length Limit:";
+        // default value (global var)
+        pathLengthLimit = 256;
+
+        UIntEditClass intEdit(dialog,                              // parent WindowClass object
+                              formTitle,                           // form name
+                              15,                                  // x position
+                              40,                                  // y position
+                              75,                                  // width
+                              13,                                  // height
+                              WindowClass::NUMBER,                 // box style
+                              pathLengthLimit,                     // default value
+                              1,                                   // min value
+                              32000,                               // max value
+                              0);                                  // options
+
+
+        // TRUNCATE TEXT FORM
+        // form input title
+        formTitle = "Replacement Text:";
+        // default box text
+        TruncateText = "[TRUNC]";
+
+        StringEditClass truncEdit(dialog,                          // parent WindowClass object
+                                  formTitle,                       // form name
+                                  100,                              // x position (left co-ord)
+                                  40,                              // y position (top co-ord)
+                                  75,                              // width
+                                  WindowClass::DEFAULT,            // height
+                                  0,                               // box style
+                                  TruncateText,                    // default text
+                                  8,                               // maximum text length (-1 is "no limit")
+                                  0);                              // Options
+
+        // EXPORT FULL PATH FORM
+        // "Separate Known Files" checkbox title
+        String exportFullTitle = "Export with full path";
+        // "Separate Known Files" checkbox control constructor
+        CheckBoxClass exportFullEdit(dialog,                     // parent WindowClass object
+                                   exportFullTitle,              // form name
+                                   15,                              // x position (left co-ord)
+                                   70,                              // y position (top co-ord)
+                                   180,                             // width
+                                   WindowClass::DEFAULT,            // height
+                                   0,                               // box style
+                                   ExportFull);                  // value
+
+
+        // execute the box
+        if (dialog.Execute() != SystemClass::OK)
+        {
+          // if anything othert than "OK" is clicked, exit
+          Log("Script Cancelled");
+          SystemClass::Exit(1);
+        }
+
+        // ----------------------------------------------------
+        // SHENANIGAN LAND
+        // ----------------------------------------------------
+
+        // first get the length of the export path
+        exportPathLen = exportPath.GetLength();
+        Log(exportPath);
+        Log(String::Format("Length of base Export path is {0}", exportPathLen));
+        Log(String::Format("File path Length limit is {0}", pathLengthLimit));
+
+        // check the export path isn't longer than our limit
+        // if it is, cancel the operation as we don't want to start renaming directories
+        if (exportPathLen > pathLengthLimit)
+        {
+         String quitText = "Base Export Path longer than max path length - please adjust export path and try again";
+         SystemClass::Message(0, "", quitText);
+
+        } // if (exportPathLen > pathLengthLimit)
+
+        // open logFile
+        logFile.Open(exportPath + "\\" + logFileName, FileClass::WRITETEXTCRLF);
+        logFile.WriteLine("Truncated Name|Original Name");
+
+        forall (EntryClass e in c.EntryRoot())
+        {
+          if (e.IsSelected())
+          {
+            String fileName = e.Name();
+            Log(String::Format("Processing: {0}", fileName));
+            int fileNameLen = fileName.GetLength();
+            Log(String::Format("Filename Length: {0}", fileNameLen));
+
+            if ((fileNameLen > pathLengthLimit) || ((exportPathLen + fileNameLen) > pathLengthLimit))
+            {
+              Log(String::Format("Filename too long. Truncating..", fileName));
+              String newFileName = doFileTrunc(e);
+              logFile.WriteLine(String::Format("{0}|{1}", newFileName, fileName));
+              fileName = newFileName;
+            } // if (fileNameLen > pathLengthLimit)
+
+
+            EntryFileClass file();
+            LocalFileClass local;
+            String fullFolderPath();
+            local = new LocalFileClass();
+
+            file.Open(e);
+
+            if (ExportFull == true)
+            {
+              fullFolderPath = String::Format("{0}\\{1}", exportPath, e.FullPath());
+              int fullExportPathLen = fullFolderPath.GetLength();
+              Log(String::Format("Full export path: {0}", fullExportPathLen));
+              if (fullExportPathLen  > pathLengthLimit)
+              {
+                Log("Export path too long. Will truncate filename.");
+                String newFileName = doFileTrunc(e);
+                logFile.WriteLine(String::Format("{0}|{1}", newFileName, fileName));
+                fileName = newFileName;
+                fullFolderPath = String::Format("{0}\\Truncated", exportPath);
+              }
+
+            }
+            else
+            {
+              fullFolderPath = exportPath;
+            }
+
+            if (!LocalMachine.PathExists(fullFolderPath))
+            {
+              LocalMachine.CreateFolder(fullFolderPath, ConnectionClass::CREATEFOLDERALL);
+            }
+
+            local.Open(fullFolderPath + "\\" + fileName, FileClass::WRITE);
+            local.WriteBuffer(file);
+            local.Close();   // added
+            file.Close();    // added
+
+
+          } // if (e.IsSelected())
+
+        } // forall (EntryClass e in c.EntryRoot())
+
+      logFile.Close();
+      } // if (c.EntryRoot().FirstChild())
+
+      else
+      {
+        Console.WriteLine("No evidence!");
+      }
+
+    } // if (c)
+
+    else
+    {
+      Console.WriteLine("No case!");
+    }
+
+  } // End MAIN
+
+
+  //-------------------------------------------------------------
+  // doFileTrunc
+  //-------------------------------------------------------------
+  String doFileTrunc(const EntryClass fE)
+  {
+     String fileExt = fE.Extension();
+      if (fileExt.GetLength() > 5)
+      {
+        Log("File Extension > 5 chars found. Truncating extension too.");
+        int getVal = fileExt.GetLength() - 4;
+        fileExt = String::Format(".{0}", fileExt.SubString(getVal));
+        Log(String::Format("File Extension changed to {0}", fileExt));
+      }
+      String newFileName = String::Format("{0}{1}.{2}", TruncateText, FileCounter, fileExt);
+      Log(String::Format("CONVERSION; {0} to {1}:", fE.Name().GetLength(), newFileName.GetLength()));
+      Log(fE.Name());
+      Log(String::Format("Becomes {0}", newFileName));
+      FileCounter = FileCounter + 1;
+
+      return newFileName ;
+  }
+
+
+
+  //-------------------------------------------------------------
+  // Log
+  //-------------------------------------------------------------
+  void Log(const String &message)
+  {
+    DateClass date();
+    date.Now();
+    Console.WriteLine("[{0}] [{1}] {2}", date.GetString(), ScriptName, message);
+  }
+
+
+} // End Class MainClass
